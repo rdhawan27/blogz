@@ -6,6 +6,9 @@ import hashutils
 template_dir = os.path.join(os.path.dirname(__file__), 'templates')
 jinja_env = jinja2.Environment(loader = jinja2.FileSystemLoader(template_dir), autoescape = True)
 
+auth_paths=["/login", "/signup"]
+
+
 class BlogHandler(webapp2.RequestHandler):
     """ Utility class for gathering various useful methods that are used by most request handlers """
 
@@ -19,24 +22,21 @@ class BlogHandler(webapp2.RequestHandler):
             Get all posts by a specific user, ordered by creation date (descending).
             The user parameter will be a User object.
         """
+        #query = Post.all().order('-created')
+        #query = Post.all().filter("author",db.get("aglkZXZ-YmxvZ3pyEQsSBFVzZXIYgICAgICAoAsM")).order('-created')
+        query = Post.all().filter("author",user).order('-created')
+        #import pdb; pdb.set_trace()
+        #print("bye")
+        return query.fetch(limit=limit,offset=offset)
 
-        # TODO - filter the query so that only posts by the given user
-        return None
+        #Todo - filter the query so that only posts by the given user
+        #return None
 
     def get_user_by_name(self, username):
         """ Get a user object from the db, based on their username """
         user = db.GqlQuery("SELECT * FROM User WHERE username = '%s'" % username)
         if user:
             return user.get()
-
-    def login_user(self, user):
-        """ Login a user specified by a User object user """
-        user_id = user.key().id()
-        self.set_secure_cookie('user_id', str(user_id))
-
-    def logout_user(self):
-        """ Logout a user specified by a User object user """
-        self.set_secure_cookie('user_id', '')
 
     def read_secure_cookie(self, name):
         cookie_val = self.request.cookies.get(name)
@@ -47,6 +47,15 @@ class BlogHandler(webapp2.RequestHandler):
         cookie_val = hashutils.make_secure_val(val)
         self.response.headers.add_header('Set-Cookie', '%s=%s; Path=/' % (name, cookie_val))
 
+    def login_user(self, user):
+        """ Login a user specified by a User object user """
+        user_id = user.key().id()
+        self.set_secure_cookie('user_id', str(user_id))
+
+    def logout_user(self):
+        """ Logout a user specified by a User object user """
+        self.set_secure_cookie('user_id', '')
+
     def initialize(self, *a, **kw):
         """
             A filter to restrict access to certain pages when not logged in.
@@ -54,11 +63,14 @@ class BlogHandler(webapp2.RequestHandler):
             must be signed in to access the path/resource.
         """
         webapp2.RequestHandler.initialize(self, *a, **kw)
-        uid = self.read_secure_cookie('user_id')
-        self.user = uid and User.get_by_id(int(uid))
+        user_id = self.read_secure_cookie('user_id')
+        if user_id:
+            self.user = User.get_by_id(int(user_id))
+        elif self.request.path not in auth_paths:
+            self.user = None
 
-        if not self.user and self.request.path in auth_paths:
-            self.redirect('/login')
+        #return self.redirect("/login")
+
 
 class IndexHandler(BlogHandler):
 
@@ -75,7 +87,6 @@ class BlogIndexHandler(BlogHandler):
     page_size = 5
 
     def get(self, username=""):
-        """ """
 
         # If request is for a specific page, set page number and offset accordingly
         page = self.request.get("page")
